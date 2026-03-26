@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Milk Output Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f4f0; --bg3: #eeecea;
+    --text: #1a1a1a; --text2: #6b6a66; --text3: #9b9a96;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --blue: #378ADD; --amber: #EF9F27; --gray: #888780; --green: #1D9E75;
+    --radius: 10px; --radius-sm: 7px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1c; --bg2: #252525; --bg3: #2e2e2e;
+      --text: #f0eeea; --text2: #a0a09a; --text3: #6a6a64;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+  .app { max-width: 480px; margin: 0 auto; padding: 16px 12px 40px; }
+  header { margin-bottom: 20px; }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--text); }
+  header p { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .tabs { display: flex; gap: 2px; background: var(--bg2); border-radius: var(--radius); padding: 3px; margin-bottom: 16px; }
+  .tab { flex: 1; padding: 7px; font-size: 13px; text-align: center; border: none; background: transparent; color: var(--text2); border-radius: 8px; cursor: pointer; transition: all 0.15s; }
+  .tab.active { background: var(--bg); color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .panel { display: none; } .panel.active { display: block; }
+  .date-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .date-nav { width: 34px; height: 34px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .date-label { flex: 1; text-align: center; font-size: 15px; font-weight: 500; }
+  .summary-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 14px; }
+  .metric { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; border: 0.5px solid var(--border); }
+  .metric-val { font-size: 18px; font-weight: 600; }
+  .metric-lbl { font-size: 10px; color: var(--text2); margin-top: 2px; }
+  .metric.highlight { border-color: rgba(55,138,221,0.35); background: rgba(55,138,221,0.07); }
+  .metric.highlight .metric-val { color: #185FA5; }
+  @media (prefers-color-scheme: dark) { .metric.highlight .metric-val { color: #85B7EB; } }
+  .session-list { display: flex; flex-direction: column; gap: 6px; }
+  .session-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; gap: 10px; transition: opacity 0.2s; }
+  .session-card.done { opacity: 0.55; }
+  .session-card.is-last { border-color: rgba(55,138,221,0.4); }
+  .dot-btn { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer; transition: background 0.2s, transform 0.1s; position: relative; display: flex; align-items: center; justify-content: center; }
+  .dot-btn:active { transform: scale(0.88); }
+  .dot-btn.blue { background: var(--blue); } .dot-btn.amber { background: var(--amber); } .dot-btn.gray { background: var(--gray); } .dot-btn.green { background: #1D9E75; } .dot-btn.purple { background: #7F77DD; } .dot-btn.done { background: #c8c7c3; }
+  .dot-btn.done::after { content: ''; display: block; width: 6px; height: 10px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(40deg) translate(-1px, -1px); }
+  .s-info { flex: 1; min-width: 0; }
+  .s-time { font-size: 13px; font-weight: 500; }
+  .s-name { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-inputs { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .field { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .mini-input { width: 62px; padding: 5px 6px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text); text-align: center; -moz-appearance: textfield; transition: border-color 0.2s; }
+  .mini-input::-webkit-outer-spin-button, .mini-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .mini-input:focus { outline: none; border-color: var(--blue); }
+  .mini-input.flash { border-color: var(--green); }
+  .field-lbl { font-size: 10px; color: var(--text3); }
+  .saved-badge { font-size: 10px; color: var(--green); font-weight: 500; opacity: 0; transition: opacity 0.3s; white-space: nowrap; align-self: center; min-width: 40px; }
+  .saved-badge.visible { opacity: 1; }
+  .last-badge { font-size: 10px; background: rgba(55,138,221,0.12); color: #185FA5; border-radius: 99px; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
+  @media (prefers-color-scheme: dark) { .last-badge { color: #85B7EB; background: rgba(55,138,221,0.2); } }
+  .note-wrap { margin-top: 12px; }
+  .note-input { width: 100%; padding: 9px 12px; font-size: 13px; border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: none; }
+  .note-input:focus { outline: none; border-color: var(--blue); }
+  .chart-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+  .chart-btn { padding: 5px 14px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: 99px; background: transparent; color: var(--text2); cursor: pointer; }
+  .chart-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .chart-wrap { position: relative; width: 100%; height: 220px; background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .history-table { width: 100%; font-size: 13px; border-collapse: collapse; background: var(--bg); border-radius: var(--radius); overflow: hidden; border: 0.5px solid var(--border); }
+  .history-table th { text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 400; font-size: 11px; border-bottom: 0.5px solid var(--border); background: var(--bg2); }
+  .history-table td { padding: 9px 10px; border-bottom: 0.5px solid var(--border); }
+  .history-table tr:last-child td { border-bottom: none; }
+  .io-section { margin-top: 8px; }
+  .io-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--text2); }
+  .io-row { display: flex; gap: 8px; }
+  .io-btn { flex: 1; padding: 9px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); cursor: pointer; text-align: center; }
+  .io-btn:hover { background: var(--bg2); }
+  .io-note { font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.6; }
+  .empty { text-align: center; padding: 24px; color: var(--text2); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Milk tracker</h1>
+    <p>10-day supply boost · 9 sessions/day</p>
+  </header>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('log',this)">Log</button>
+    <button class="tab" onclick="switchTab('charts',this)">Charts</button>
+    <button class="tab" onclick="switchTab('history',this)">History</button>
+    <button class="tab" onclick="switchTab('settings',this)">Data</button>
+  </div>
+  <div id="tab-log" class="panel active">
+    <div class="date-row">
+      <button class="date-nav" onclick="changeDay(-1)">‹</button>
+      <div class="date-label" id="date-label"></div>
+      <button class="date-nav" onclick="changeDay(1)">›</button>
+    </div>
+    <div class="summary-row">
+      <div class="metric"><div class="metric-val" id="sum-total">0 oz</div><div class="metric-lbl">total today</div></div>
+      <div class="metric"><div class="metric-val" id="sum-sessions">0/9</div><div class="metric-lbl">sessions done</div></div>
+      <div class="metric"><div class="metric-val" id="sum-avg">—</div><div class="metric-lbl">avg per session</div></div>
+      <div class="metric highlight"><div class="metric-val" id="sum-last">—</div><div class="metric-lbl">last session</div></div>
+    </div>
+    <div class="session-list" id="session-list"></div>
+    <div class="note-wrap">
+      <textarea class="note-input" id="day-note" rows="2" placeholder="Day note (optional)..." oninput="saveNote()"></textarea>
+    </div>
+  </div>
+  <div id="tab-charts" class="panel">
+    <div class="chart-toggle">
+      <button class="chart-btn active" onclick="setChartView('daily',this)">Daily total</button>
+      <button class="chart-btn" onclick="setChartView('sessions',this)">By session</button>
+    </div>
+    <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+    <div class="chart-legend" id="chart-legend"></div>
+  </div>
+  <div id="tab-history" class="panel">
+    <table class="history-table">
+      <thead><tr><th>Date</th><th>Total (oz)</th><th>Sessions</th><th>Note</th></tr></thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
+  <div id="tab-settings" class="panel">
+    <div class="io-section">
+      <div class="io-title">Export / import your data</div>
+      <div class="io-row">
+        <button class="io-btn" onclick="exportData()">⬇ Export JSON</button>
+        <label class="io-btn" style="cursor:pointer;">⬆ Import JSON<input type="file" accept=".json" style="display:none" onchange="importData(event)" /></label>
+      </div>
+      <div class="io-note">
+        <strong>Phone → desktop sync:</strong> Export JSON on your phone → AirDrop or email to desktop → Import there.<br><br>
+        Data lives in your browser's local storage — persists until you clear browser data.
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const SESSIONS = [
+  { time: '12:00 am', name: 'Session 1 — pump before bed', type: 'blue' },
+  { time: '3:00 am',  name: 'Session 2 — peak prolactin window', type: 'blue' },
+  { time: '6:00 am',  name: 'Session 3 — morning', type: 'blue' },
+  { time: '8:30 am',  name: 'Power pump (60 min)', type: 'amber' },
+  { time: '11:00 am', name: 'Session 5 — near noon', type: 'green' },
+  { time: '1:30 pm',  name: 'Session 6 — post lunch', type: 'green' },
+  { time: '4:00 pm',  name: 'Session 7 — afternoon', type: 'green' },
+  { time: '6:30 pm',  name: 'Session 8 — post dinner', type: 'purple' },
+  { time: '9:00 pm',  name: 'Session 9 — last before wind-down', type: 'purple' },
+];
+let currentDate = new Date(); currentDate.setHours(0,0,0,0);
+let data = {}, chartView = 'daily', chartInst = null;
+const saveTimers = {};
+
+function loadData() { try { const s = localStorage.getItem('milk_tracker_v1'); if (s) data = JSON.parse(s); } catch(e) {} }
+function saveData() { try { localStorage.setItem('milk_tracker_v1', JSON.stringify(data)); } catch(e) {} }
+function dateKey(d) { return d.toISOString().split('T')[0]; }
+function fmtDate(d) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = (d - today) / 86400000;
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function getDayData(key) {
+  if (!data[key]) data[key] = { sessions: Array(9).fill(null).map(() => ({ oz: '', min: '', done: false })), note: '' };
+  data[key].sessions.forEach(s => { if (s.done === undefined) s.done = false; });
+  return data[key];
+}
+function changeDay(d) { currentDate = new Date(currentDate.getTime() + d * 86400000); renderLog(); }
+function flashSaved(badgeEl, inputEl) {
+  if (inputEl) { inputEl.classList.add('flash'); setTimeout(() => inputEl.classList.remove('flash'), 600); }
+  badgeEl.textContent = 'saved ✓'; badgeEl.classList.add('visible');
+  clearTimeout(saveTimers[badgeEl.dataset.idx]);
+  saveTimers[badgeEl.dataset.idx] = setTimeout(() => badgeEl.classList.remove('visible'), 1600);
+}
+function renderLog() {
+  const key = dateKey(currentDate);
+  const day = getDayData(key);
+  document.getElementById('date-label').textContent = fmtDate(currentDate);
+  document.getElementById('day-note').value = day.note || '';
+  const list = document.getElementById('session-list');
+  list.innerHTML = '';
+  day.sessions.forEach((s, i) => {
+    const ses = SESSIONS[i], isDone = !!s.done;
+    const card = document.createElement('div');
+    card.className = 'session-card' + (isDone ? ' done' : '');
+    card.id = 'card-' + i;
+    card.innerHTML = `
+      <button class="dot-btn ${isDone ? 'done' : ses.type}" title="Mark complete" onclick="toggleDone(${i})"></button>
+      <div class="s-info"><div class="s-time">${ses.time}</div><div class="s-name">${ses.name}</div></div>
+      <div class="s-inputs">
+        <div class="field"><input class="mini-input" id="oz-${i}" type="number" min="0" step="0.1" placeholder="0" value="${s.oz}" oninput="updateSession(${i},'oz',this.value,this)" /><span class="field-lbl">oz</span></div>
+        <div class="field"><input class="mini-input" id="min-${i}" type="number" min="0" placeholder="0" value="${s.min}" oninput="updateSession(${i},'min',this.value,this)" /><span class="field-lbl">min</span></div>
+        <span class="saved-badge" id="badge-${i}" data-idx="${i}"></span>
+      </div>`;
+    list.appendChild(card);
+  });
+  updateSummary(day);
+}
+function updateSummary(day) {
+  let total = 0, logged = 0, lastOz = null, lastIdx = -1;
+  day.sessions.forEach((s, i) => {
+    if (s.oz !== '') { total += parseFloat(s.oz)||0; logged++; lastOz = parseFloat(s.oz)||0; lastIdx = i; }
+  });
+  document.getElementById('sum-total').textContent = total.toFixed(1) + ' oz';
+  document.getElementById('sum-sessions').textContent = day.sessions.filter(s => s.done).length + '/9';
+  document.getElementById('sum-avg').textContent = logged > 0 ? (total/logged).toFixed(1)+' oz' : '—';
+  document.getElementById('sum-last').textContent = lastOz !== null ? lastOz.toFixed(1)+' oz' : '—';
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('is-last'));
+  document.querySelectorAll('.last-badge').forEach(b => b.remove());
+  if (lastIdx >= 0) {
+    const card = document.getElementById('card-' + lastIdx);
+    if (card) {
+      card.classList.add('is-last');
+      const badge = document.createElement('span');
+      badge.className = 'last-badge'; badge.textContent = 'last';
+      card.querySelector('.s-inputs').appendChild(badge);
+    }
+  }
+}
+function updateSession(i, field, val, inputEl) {
+  const key = dateKey(currentDate);
+  getDayData(key).sessions[i][field] = val;
+  saveData(); updateSummary(getDayData(key));
+  const badge = document.getElementById('badge-' + i);
+  if (badge) flashSaved(badge, inputEl);
+}
+function toggleDone(i) {
+  const key = dateKey(currentDate), day = getDayData(key);
+  day.sessions[i].done = !day.sessions[i].done;
+  saveData();
+  const card = document.getElementById('card-' + i), btn = card.querySelector('.dot-btn'), isDone = day.sessions[i].done;
+  btn.className = 'dot-btn ' + (isDone ? 'done' : SESSIONS[i].type);
+  card.className = 'session-card' + (isDone ? ' done' : '') + (card.classList.contains('is-last') ? ' is-last' : '');
+  updateSummary(day);
+}
+function saveNote() { getDayData(dateKey(currentDate)).note = document.getElementById('day-note').value; saveData(); }
+function switchTab(t, el) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active'); document.getElementById('tab-' + t).classList.add('active');
+  if (t === 'charts') renderChart();
+  if (t === 'history') renderHistory();
+}
+function setChartView(v, el) {
+  chartView = v;
+  document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active'); renderChart();
+}
+function getLast14Days() {
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days.push(d); }
+  return days;
+}
+function renderChart() {
+  const days = getLast14Days();
+  const labels = days.map(d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' }));
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  if (chartView === 'daily') {
+    const totals = days.map(d => { const day = data[dateKey(d)]; if (!day) return 0; return parseFloat(day.sessions.reduce((s,x) => s+(parseFloat(x.oz)||0),0).toFixed(1)); });
+    chartInst = new Chart(ctx, { type:'bar', data:{ labels, datasets:[{ label:'oz', data:totals, backgroundColor:'#378ADD', borderRadius:4, borderSkipped:false }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false},ticks:{font:{size:10},maxRotation:45,autoSkip:false}}, y:{beginAtZero:true,grid:{color:'rgba(128,128,128,0.1)'},ticks:{font:{size:10},callback:v=>v+' oz'}} } } });
+    document.getElementById('chart-legend').innerHTML = '<span style="display:flex;align-items:center;gap:4px;"><span class="legend-dot" style="background:#378ADD"></span>Daily total (oz)</span>';
+  } else {
+    const colors = ['#378ADD','#378ADD','#378ADD','#EF9F27','#1D9E75','#1D9E75','#1D9E75','#7F77DD','#7F77DD'];
+    const datasets = SESSIONS.map((ses,i) => ({ label:ses.time, data:days.map(d=>{ const day=data[dateKey(d)]; return day?(parseFloat(day.sessions[i].oz)||0):0; }), backgroundColor:colors[i]+'cc', stack:'a', borderRadius:2 }));
+    chartInst = new Chart(ctx, { type:'bar', data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{stacked:true,grid:{display:false},ticks:{font:{size:10},maxRotation:45,autoSkip:false}}, y:{stacked:true,beginAtZero:true,grid:{color:'rgba(128,128,128,0.1)'},ticks:{font:{size:10},callback:v=>v+' oz'}} } } });
+    document.getElementById('chart-legend').innerHTML = `<span style="display:flex;align-items:center;gap:4px;"><span class="legend-dot" style="background:#378ADD"></span>Night/early AM</span><span style="display:flex;align-items:center;gap:4px;"><span class="legend-dot" style="background:#EF9F27"></span>Power pump</span><span style="display:flex;align-items:center;gap:4px;"><span class="legend-dot" style="background:#1D9E75"></span>Daytime</span><span style="display:flex;align-items:center;gap:4px;"><span class="legend-dot" style="background:#7F77DD"></span>Evening</span>`;
+  }
+}
+function renderHistory() {
+  const days = getLast14Days().reverse(), tbody = document.getElementById('history-body');
+  tbody.innerHTML = ''; let hasAny = false;
+  days.forEach(d => {
+    const key = dateKey(d), day = data[key]; if (!day) return;
+    const total = day.sessions.reduce((s,x) => s+(parseFloat(x.oz)||0),0);
+    const done = day.sessions.filter(x=>x.done).length;
+    if (done===0 && total===0) return; hasAny = true;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDate(d)}</td><td>${total.toFixed(1)}</td><td>${done}/9</td><td style="color:var(--text2);font-size:11px;">${day.note||''}</td>`;
+    tbody.appendChild(tr);
+  });
+  if (!hasAny) tbody.innerHTML = '<tr><td colspan="4" class="empty">No data yet — log your first session!</td></tr>';
+}
+function exportData() {
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'milk_tracker_backup_'+dateKey(new Date())+'.json'; a.click();
+}
+function importData(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      let merged = 0, skipped = 0;
+      Object.keys(imported).forEach(key => {
+        if (!data[key]) { data[key] = imported[key]; merged++; return; }
+        imported[key].sessions.forEach((s, i) => {
+          const cur = data[key].sessions[i];
+          if (s.oz !== '' && cur.oz === '') { cur.oz = s.oz; merged++; }
+          else if (s.oz !== '' && cur.oz !== '') { skipped++; }
+          if (s.min !== '' && cur.min === '') cur.min = s.min;
+          if (s.done && !cur.done) cur.done = s.done;
+        });
+        if (!data[key].note && imported[key].note) data[key].note = imported[key].note;
+      });
+      saveData(); renderLog();
+      alert(`Import complete.\n${merged} session(s) merged in.\n${skipped} conflict(s) kept your existing data.`);
+    } catch { alert('Could not read file — make sure it\'s a valid export.'); }
+  };
+  reader.readAsText(file);
+}
+loadData(); renderLog();
+</script>
+</body>
+</html>
