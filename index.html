@@ -48,7 +48,10 @@
   .dot-btn.blue { background: var(--blue); } .dot-btn.amber { background: var(--amber); } .dot-btn.gray { background: var(--gray); } .dot-btn.green { background: #1D9E75; } .dot-btn.purple { background: #7F77DD; } .dot-btn.done { background: #c8c7c3; }
   .dot-btn.done::after { content: ''; display: block; width: 6px; height: 10px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(40deg) translate(-1px, -1px); }
   .s-info { flex: 1; min-width: 0; }
-  .s-time { font-size: 13px; font-weight: 500; }
+  .s-time { font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .s-time:hover { color: var(--blue); }
+  .s-time.edited::after { content: '\270E'; font-size: 9px; color: var(--blue); opacity: 0.7; }
+  .time-input { font-size: 13px; font-weight: 500; border: none; border-bottom: 1.5px solid var(--blue); background: transparent; color: var(--text); outline: none; width: 80px; padding: 0; }
   .s-name { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .s-inputs { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .field { display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -168,8 +171,11 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 function getDayData(key) {
-  if (!data[key]) data[key] = { sessions: Array(9).fill(null).map(() => ({ oz: '', min: '', done: false })), note: '' };
-  data[key].sessions.forEach(s => { if (s.done === undefined) s.done = false; });
+  if (!data[key]) data[key] = { sessions: Array(9).fill(null).map(() => ({ oz: '', min: '', done: false, customTime: '' })), note: '' };
+  data[key].sessions.forEach(s => {
+    if (s.done === undefined) s.done = false;
+    if (s.customTime === undefined) s.customTime = '';
+  });
   return data[key];
 }
 function changeDay(d) { currentDate = new Date(currentDate.getTime() + d * 86400000); renderLog(); }
@@ -188,12 +194,17 @@ function renderLog() {
   list.innerHTML = '';
   day.sessions.forEach((s, i) => {
     const ses = SESSIONS[i], isDone = !!s.done;
+    const displayTime = s.customTime || ses.time;
+    const isEdited = !!s.customTime;
     const card = document.createElement('div');
     card.className = 'session-card' + (isDone ? ' done' : '');
     card.id = 'card-' + i;
     card.innerHTML = `
       <button class="dot-btn ${isDone ? 'done' : ses.type}" title="Mark complete" onclick="toggleDone(${i})"></button>
-      <div class="s-info"><div class="s-time">${ses.time}</div><div class="s-name">${ses.name}</div></div>
+      <div class="s-info">
+        <div class="s-time${isEdited ? ' edited' : ''}" id="time-label-${i}" onclick="editTime(${i})" title="Click to edit time">${displayTime}</div>
+        <div class="s-name">${ses.name}</div>
+      </div>
       <div class="s-inputs">
         <div class="field"><input class="mini-input" id="oz-${i}" type="number" min="0" step="0.1" placeholder="0" value="${s.oz}" oninput="updateSession(${i},'oz',this.value,this)" /><span class="field-lbl">oz</span></div>
         <div class="field"><input class="mini-input" id="min-${i}" type="number" min="0" placeholder="0" value="${s.min}" oninput="updateSession(${i},'min',this.value,this)" /><span class="field-lbl">min</span></div>
@@ -241,6 +252,32 @@ function toggleDone(i) {
   updateSummary(day);
 }
 function saveNote() { getDayData(dateKey(currentDate)).note = document.getElementById('day-note').value; saveData(); }
+function editTime(i) {
+  const key = dateKey(currentDate);
+  const day = getDayData(key);
+  const label = document.getElementById('time-label-' + i);
+  if (!label) return;
+  const current = day.sessions[i].customTime || SESSIONS[i].time;
+  label.outerHTML = `<input class="time-input" id="time-input-${i}" type="text" value="${current}" placeholder="${SESSIONS[i].time}" onblur="commitTime(${i})" onkeydown="if(event.key==='Enter')this.blur()" />`;
+  const inp = document.getElementById('time-input-' + i);
+  if (inp) { inp.focus(); inp.select(); }
+}
+function commitTime(i) {
+  const key = dateKey(currentDate);
+  const day = getDayData(key);
+  const inp = document.getElementById('time-input-' + i);
+  if (!inp) return;
+  let val = inp.value.trim();
+  if (val && !/am|pm/i.test(val)) {
+    const defaultSuffix = SESSIONS[i].time.match(/am|pm/i);
+    if (defaultSuffix) val += ' ' + defaultSuffix[0];
+  }
+  day.sessions[i].customTime = (val && val !== SESSIONS[i].time) ? val : '';
+  saveData();
+  const isEdited = !!day.sessions[i].customTime;
+  const displayTime = day.sessions[i].customTime || SESSIONS[i].time;
+  inp.outerHTML = `<div class="s-time${isEdited ? ' edited' : ''}" id="time-label-${i}" onclick="editTime(${i})" title="Click to edit time">${displayTime}</div>`;
+}
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
