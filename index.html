@@ -39,10 +39,16 @@
   .metric.highlight { border-color: rgba(55,138,221,0.35); background: rgba(55,138,221,0.07); }
   .metric.highlight .metric-val { color: #185FA5; }
   @media (prefers-color-scheme: dark) { .metric.highlight .metric-val { color: #85B7EB; } }
-  .session-list { display: flex; flex-direction: column; gap: 6px; }
-  .session-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; gap: 10px; transition: opacity 0.2s; }
+  .session-list { display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .session-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; gap: 10px; transition: opacity 0.2s; cursor: default; }
   .session-card.done { opacity: 0.55; }
   .session-card.is-last { border-color: rgba(55,138,221,0.4); }
+  .session-card.dragging { opacity: 0.25; }
+  .drag-handle { width: 18px; flex-shrink: 0; cursor: grab; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; padding: 4px 2px; opacity: 0.35; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .drag-handle:active { cursor: grabbing; opacity: 0.7; }
+  .drag-handle span { display: block; width: 12px; height: 1.5px; background: var(--text); border-radius: 2px; }
+  .drag-ghost { position: fixed; pointer-events: none; z-index: 1000; opacity: 0.9; box-shadow: 0 8px 24px rgba(0,0,0,0.22); border-radius: 10px; left: 0; top: 0; transition: none; }
+  .drop-indicator { height: 3px; background: var(--blue); border-radius: 99px; margin: 0; pointer-events: none; box-shadow: 0 0 6px rgba(55,138,221,0.5); }
   .dot-btn { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer; transition: background 0.2s, transform 0.1s; position: relative; display: flex; align-items: center; justify-content: center; }
   .dot-btn:active { transform: scale(0.88); }
   .dot-btn.blue { background: var(--blue); } .dot-btn.amber { background: var(--amber); } .dot-btn.gray { background: var(--gray); } .dot-btn.green { background: #1D9E75; } .dot-btn.purple { background: #7F77DD; } .dot-btn.done { background: #c8c7c3; }
@@ -171,10 +177,11 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 function getDayData(key) {
-  if (!data[key]) data[key] = { sessions: Array(9).fill(null).map(() => ({ oz: '', min: '', done: false, customTime: '' })), note: '' };
-  data[key].sessions.forEach(s => {
+  if (!data[key]) data[key] = { sessions: Array(9).fill(null).map((_, i) => ({ oz: '', min: '', done: false, customTime: '', sesIdx: i })), note: '' };
+  data[key].sessions.forEach((s, i) => {
     if (s.done === undefined) s.done = false;
     if (s.customTime === undefined) s.customTime = '';
+    if (s.sesIdx === undefined) s.sesIdx = i; // backfill for existing saved data
   });
   return data[key];
 }
@@ -193,26 +200,37 @@ function renderLog() {
   const list = document.getElementById('session-list');
   list.innerHTML = '';
   day.sessions.forEach((s, i) => {
-    const ses = SESSIONS[i], isDone = !!s.done;
+    const ses = SESSIONS[s.sesIdx !== undefined ? s.sesIdx : i];
+    const moved = s.sesIdx !== undefined && s.sesIdx !== i;
+    const isDone = !!s.done;
     const displayTime = s.customTime || ses.time;
     const isEdited = !!s.customTime;
+    const displayName = moved ? `Session ${i+1} — session time adjusted` : `Session ${i+1} — ${ses.name.replace(/^Session \d+ — /, '')}`;
     const card = document.createElement('div');
     card.className = 'session-card' + (isDone ? ' done' : '');
     card.id = 'card-' + i;
     card.innerHTML = `
-      <button class="dot-btn ${isDone ? 'done' : ses.type}" title="Mark complete" onclick="toggleDone(${i})"></button>
+      <div class="drag-handle" title="Drag to reorder"><span></span><span></span><span></span></div>
+      <button class="dot-btn ${isDone ? 'done' : ses.type}" title="Mark complete" onclick="toggleDone(cardIdx(this))"></button>
       <div class="s-info">
-        <div class="s-time${isEdited ? ' edited' : ''}" id="time-label-${i}" onclick="editTime(${i})" title="Click to edit time">${displayTime}</div>
-        <div class="s-name">${ses.name}</div>
+        <div class="s-time${isEdited ? ' edited' : ''}" id="time-label-${i}" onclick="editTime(cardIdx(this))" title="Click to edit time">${displayTime}</div>
+        <div class="s-name">${displayName}</div>
       </div>
       <div class="s-inputs">
-        <div class="field"><input class="mini-input" id="oz-${i}" type="number" min="0" step="0.1" placeholder="0" value="${s.oz}" oninput="updateSession(${i},'oz',this.value,this)" /><span class="field-lbl">oz</span></div>
-        <div class="field"><input class="mini-input" id="min-${i}" type="number" min="0" placeholder="0" value="${s.min}" oninput="updateSession(${i},'min',this.value,this)" /><span class="field-lbl">min</span></div>
-        <span class="saved-badge" id="badge-${i}" data-idx="${i}"></span>
+        <div class="field"><input class="mini-input" type="number" min="0" step="0.1" placeholder="0" value="${s.oz}" oninput="updateSession(cardIdx(this),'oz',this.value,this)" /><span class="field-lbl">oz</span></div>
+        <div class="field"><input class="mini-input" type="number" min="0" placeholder="0" value="${s.min}" oninput="updateSession(cardIdx(this),'min',this.value,this)" /><span class="field-lbl">min</span></div>
+        <span class="saved-badge" data-idx="${i}"></span>
       </div>`;
+    const handle = card.querySelector('.drag-handle');
+    attachDragHandle(handle, card);
     list.appendChild(card);
   });
   updateSummary(day);
+  initDragList();
+}
+function cardIdx(el) {
+  const cards = [...document.getElementById('session-list').children];
+  return cards.indexOf(el.closest('.session-card'));
 }
 function updateSummary(day) {
   let total = 0, logged = 0, lastOz = null, lastIdx = -1;
@@ -223,16 +241,14 @@ function updateSummary(day) {
   document.getElementById('sum-sessions').textContent = day.sessions.filter(s => s.done).length + '/9';
   document.getElementById('sum-avg').textContent = logged > 0 ? (total/logged).toFixed(1)+' oz' : '—';
   document.getElementById('sum-last').textContent = lastOz !== null ? lastOz.toFixed(1)+' oz' : '—';
-  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('is-last'));
+  const cards = [...document.getElementById('session-list').children];
+  cards.forEach(c => { c.classList.remove('is-last'); });
   document.querySelectorAll('.last-badge').forEach(b => b.remove());
-  if (lastIdx >= 0) {
-    const card = document.getElementById('card-' + lastIdx);
-    if (card) {
-      card.classList.add('is-last');
-      const badge = document.createElement('span');
-      badge.className = 'last-badge'; badge.textContent = 'last';
-      card.querySelector('.s-inputs').appendChild(badge);
-    }
+  if (lastIdx >= 0 && cards[lastIdx]) {
+    cards[lastIdx].classList.add('is-last');
+    const badge = document.createElement('span');
+    badge.className = 'last-badge'; badge.textContent = 'last';
+    cards[lastIdx].querySelector('.s-inputs').appendChild(badge);
   }
 }
 function updateSession(i, field, val, inputEl) {
@@ -246,27 +262,29 @@ function toggleDone(i) {
   const key = dateKey(currentDate), day = getDayData(key);
   day.sessions[i].done = !day.sessions[i].done;
   saveData();
-  const card = document.getElementById('card-' + i), btn = card.querySelector('.dot-btn'), isDone = day.sessions[i].done;
-  btn.className = 'dot-btn ' + (isDone ? 'done' : SESSIONS[i].type);
-  card.className = 'session-card' + (isDone ? ' done' : '') + (card.classList.contains('is-last') ? ' is-last' : '');
-  updateSummary(day);
+  renderLog();
 }
 function saveNote() { getDayData(dateKey(currentDate)).note = document.getElementById('day-note').value; saveData(); }
 function editTime(i) {
   const key = dateKey(currentDate);
   const day = getDayData(key);
-  const label = document.getElementById('time-label-' + i);
+  const cards = [...document.getElementById('session-list').children];
+  const label = cards[i] && cards[i].querySelector('.s-time');
   if (!label) return;
   const current = day.sessions[i].customTime || SESSIONS[i].time;
-  label.outerHTML = `<input class="time-input" id="time-input-${i}" type="text" value="${current}" placeholder="${SESSIONS[i].time}" onblur="commitTime(${i})" onkeydown="if(event.key==='Enter')this.blur()" />`;
-  const inp = document.getElementById('time-input-' + i);
-  if (inp) { inp.focus(); inp.select(); }
+  const inp = document.createElement('input');
+  inp.className = 'time-input';
+  inp.type = 'text';
+  inp.value = current;
+  inp.placeholder = SESSIONS[i].time;
+  inp.addEventListener('blur', () => commitTime(i, inp));
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  label.replaceWith(inp);
+  inp.focus(); inp.select();
 }
-function commitTime(i) {
+function commitTime(i, inp) {
   const key = dateKey(currentDate);
   const day = getDayData(key);
-  const inp = document.getElementById('time-input-' + i);
-  if (!inp) return;
   let val = inp.value.trim();
   if (val && !/am|pm/i.test(val)) {
     const defaultSuffix = SESSIONS[i].time.match(/am|pm/i);
@@ -276,7 +294,12 @@ function commitTime(i) {
   saveData();
   const isEdited = !!day.sessions[i].customTime;
   const displayTime = day.sessions[i].customTime || SESSIONS[i].time;
-  inp.outerHTML = `<div class="s-time${isEdited ? ' edited' : ''}" id="time-label-${i}" onclick="editTime(${i})" title="Click to edit time">${displayTime}</div>`;
+  const label = document.createElement('div');
+  label.className = 's-time' + (isEdited ? ' edited' : '');
+  label.title = 'Click to edit time';
+  label.textContent = displayTime;
+  label.addEventListener('click', () => editTime(i));
+  inp.replaceWith(label);
 }
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -354,6 +377,133 @@ function importData(e) {
   };
   reader.readAsText(file);
 }
+// --- Drag & drop reorder ---
+let ds = null;
+
+function _cards() {
+  return [...document.getElementById('session-list').children]
+    .filter(el => el.classList.contains('session-card'));
+}
+
+function _removeIndicator() {
+  const el = document.getElementById('drop-ind');
+  if (el) el.remove();
+}
+
+function _updateIndicator(clientY) {
+  const allCards = _cards();
+  const others = allCards.filter(c => c !== ds.srcCard);
+  let insertAt = allCards.length;
+  for (let i = 0; i < others.length; i++) {
+    const r = others[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) {
+      insertAt = allCards.indexOf(others[i]);
+      break;
+    }
+  }
+  ds.insertAt = insertAt;
+  _removeIndicator();
+  const list = document.getElementById('session-list');
+  const ind = document.createElement('div');
+  ind.className = 'drop-indicator'; ind.id = 'drop-ind';
+  const cur = _cards();
+  if (insertAt >= cur.length) list.appendChild(ind);
+  else list.insertBefore(ind, cur[insertAt]);
+}
+
+function _doCommit() {
+  const srcCard = ds.srcCard;
+  const srcIdx = _cards().indexOf(srcCard);
+  let destIdx = ds.insertAt;
+  _removeIndicator();
+  ds.ghost.remove();
+  srcCard.classList.remove('dragging');
+  ds = null;
+  if (srcIdx === -1 || destIdx === null) return;
+  if (destIdx > srcIdx) destIdx--;
+  if (destIdx === srcIdx || destIdx < 0) return;
+  const key = dateKey(currentDate), day = getDayData(key);
+  const moved = day.sessions.splice(srcIdx, 1)[0];
+  day.sessions.splice(destIdx, 0, moved);
+  saveData(); renderLog();
+}
+
+// Use touch events on document — attached once, never removed
+// touch-action:none on .drag-handle tells iOS not to scroll on these touches
+document.addEventListener('touchstart', e => {
+  if (!e.target.closest('.drag-handle')) return;
+  const touch = e.touches[0];
+  const card = e.target.closest('.session-card');
+  if (!card) return;
+  e.preventDefault(); // must be called in touchstart to block scroll
+  const rect = card.getBoundingClientRect();
+  const ghost = card.cloneNode(true);
+  ghost.className = 'session-card drag-ghost';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  document.body.appendChild(ghost);
+  card.classList.add('dragging');
+  ds = { srcCard: card, ghost, startY: touch.clientY, origTop: rect.top, insertAt: null };
+}, { passive: false });
+
+document.addEventListener('touchmove', e => {
+  if (!ds) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  ds.ghost.style.top = (ds.origTop + (touch.clientY - ds.startY)) + 'px';
+  _updateIndicator(touch.clientY);
+}, { passive: false });
+
+document.addEventListener('touchend', e => {
+  if (!ds) return;
+  // touchend: no active touches, use changedTouches
+  const touch = e.changedTouches[0];
+  // update insertAt one final time with the release position
+  _updateIndicator(touch.clientY);
+  _doCommit();
+});
+
+document.addEventListener('touchcancel', () => {
+  if (!ds) return;
+  _removeIndicator();
+  ds.ghost.remove();
+  ds.srcCard.classList.remove('dragging');
+  ds = null;
+});
+
+// Mouse support
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0 || !e.target.closest('.drag-handle')) return;
+  const card = e.target.closest('.session-card');
+  if (!card) return;
+  e.preventDefault();
+  const rect = card.getBoundingClientRect();
+  const ghost = card.cloneNode(true);
+  ghost.className = 'session-card drag-ghost';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  document.body.appendChild(ghost);
+  card.classList.add('dragging');
+  ds = { srcCard: card, ghost, startY: e.clientY, origTop: rect.top, insertAt: null };
+});
+
+document.addEventListener('mousemove', e => {
+  if (!ds) return;
+  ds.ghost.style.top = (ds.origTop + (e.clientY - ds.startY)) + 'px';
+  _updateIndicator(e.clientY);
+});
+
+document.addEventListener('mouseup', e => {
+  if (!ds) return;
+  _updateIndicator(e.clientY);
+  _doCommit();
+});
+
+function attachDragHandle() {} // no-op, wired via document listeners above
+function initDragList() {}
+
 loadData(); renderLog();
 </script>
 </body>
