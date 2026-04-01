@@ -27,7 +27,7 @@ A lightweight, mobile-friendly web app to track daily milk output during a 10-da
 
 ## How to use
 
-**Live site:** `https://palc2.github.io/pc2-breastmilk-tracker`
+**Live site:** `https://palc2.github.io/breastmilk-tracker`
 
 Or download `index.html` and open it directly in any browser — no install needed.
 
